@@ -5,7 +5,7 @@ class SafeStorage {
   private isAvailable: boolean;
 
   constructor() {
-    this.isAvailable = this.checkAvailability();
+    this.isAvailable = this.checkAvailability(); 
   }
 
   private checkAvailability(): boolean {
