@@ -1,46 +1,43 @@
+import { safeStorage } from '@/lib/safeStorage';
+import { supabase } from '@/lib/supabaseClient';
 
 export interface User {
   id: number;
   nome: string;
   email: string;
   papel: 'COORDENADOR' | 'PROFESSOR' | 'ALUNO';
-  alunoId?: number;     // Para usuários do tipo ALUNO
-  professorId?: number; // Para usuários do tipo PROFESSOR
+  alunoId?: number;
+  professorId?: number;
 }
-
 
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
 }
 
-const MOCK_MODE = true;
+const USE_SUPABASE = true; // Muda para false se quiser voltar pro mock
 
 class AuthService {
   private storageKey = 'gestao_escolar_auth';
   private cachedAuthState: AuthState | null = null;
 
   getAuthState(): AuthState {
-    if (!MOCK_MODE) return { user: null, isAuthenticated: false };
-    
-    // Usar cache se disponível para evitar re-reads desnecessários
     if (this.cachedAuthState) {
       return this.cachedAuthState;
     }
     
     try {
-      const stored = localStorage.getItem(this.storageKey);
+      const stored = safeStorage.getItem(this.storageKey);
       if (stored) {
         const user = JSON.parse(stored);
-        // Validação básica do objeto user
         if (user && user.id && user.email && user.papel) {
           this.cachedAuthState = { user, isAuthenticated: true };
           return this.cachedAuthState;
         }
       }
     } catch (error) {
-      console.error('Erro ao ler auth do localStorage:', error);
-      localStorage.removeItem(this.storageKey);
+      console.error('Erro ao ler auth:', error);
+      safeStorage.removeItem(this.storageKey);
     }
     
     this.cachedAuthState = { user: null, isAuthenticated: false };
@@ -49,134 +46,159 @@ class AuthService {
 
   private getUsuariosFromStorage() {
     try {
-      const stored = localStorage.getItem('gestao_escolar_data');
+      const stored = safeStorage.getItem('gestao_escolar_data');
       if (stored) {
         const data = JSON.parse(stored);
         return data.usuarios || [];
       }
     } catch (error) {
-      console.error('Erro ao ler usuários do localStorage:', error);
+      console.error('Erro ao ler usuários:', error);
     }
     return [];
   }
 
   private getSenhasFromStorage() {
     try {
-      const stored = localStorage.getItem('gestao_escolar_senhas');
+      const stored = safeStorage.getItem('gestao_escolar_senhas');
       if (stored) {
         return JSON.parse(stored);
       }
     } catch (error) {
-      console.error('Erro ao ler senhas do localStorage:', error);
+      console.error('Erro ao ler senhas:', error);
     }
     return {};
   }
 
   async login(email: string, senha: string): Promise<{ success: boolean; user?: User; error?: string }> {
-    if (!MOCK_MODE) {
-      return { success: false, error: 'Modo mock desabilitado' };
+    // MODO SUPABASE
+    if (USE_SUPABASE) {
+      try {
+        const { data: usuarios, error: userError } = await supabase
+          .from('usuarios')
+          .select('*')
+          .eq('email', email)
+          .single();
+
+        if (userError || !usuarios) {
+          return { success: false, error: 'Email ou senha inválidos' };
+        }
+
+        const { data: senhaData, error: senhaError } = await supabase
+          .from('senhas')
+          .select('senha_hash')
+          .eq('usuario_id', usuarios.id)
+          .single();
+
+        if (senhaError || !senhaData || senhaData.senha_hash !== senha) {
+          return { success: false, error: 'Email ou senha inválidos' };
+        }
+
+        const user: User = {
+          id: usuarios.id,
+          nome: usuarios.nome,
+          email: usuarios.email,
+          papel: usuarios.papel,
+          alunoId: usuarios.aluno_id,
+          professorId: usuarios.professor_id
+        };
+
+        safeStorage.setItem(this.storageKey, JSON.stringify(user));
+        this.cachedAuthState = { user, isAuthenticated: true };
+        return { success: true, user };
+      } catch (error) {
+        console.error('Erro no login Supabase:', error);
+        return { success: false, error: 'Erro ao fazer login' };
+      }
     }
 
-    // Buscar usuários do sistema administrativo
+    // MODO MOCK (fallback)
     const usuarios = this.getUsuariosFromStorage();
     const senhas = this.getSenhasFromStorage();
 
-    // Usuários padrão do sistema (para compatibilidade)
     const usuariosPadrao = [
-  {
-    id: 1,
-    nome: 'Coordenador Sistema',
-    email: 'coordenador@demo.com',
-    senha: '123456',
-    papel: 'COORDENADOR' as const
-  },
-  {
-    id: 2,
-    nome: 'Professor História',
-    email: 'prof@demo.com',
-    senha: '123456',
-    papel: 'PROFESSOR' as const,
-    professorId: 1 // <- IMPORTANTE: bate com o professorId do mockData
-  },
-  {
-    id: 3,
-    nome: 'Ana Clara Santos',
-    email: 'aluno@demo.com',
-    senha: '123456',
-    papel: 'ALUNO' as const,
-    alunoId: 1
-  }
-];
+      {
+        id: 1,
+        nome: 'Coordenador Sistema',
+        email: 'coordenador@demo.com',
+        senha: '123456',
+        papel: 'COORDENADOR' as const
+      },
+      {
+        id: 2,
+        nome: 'Professor História',
+        email: 'prof@demo.com',
+        senha: '123456',
+        papel: 'PROFESSOR' as const,
+        professorId: 1
+      },
+      {
+        id: 3,
+        nome: 'Ana Clara Santos',
+        email: 'aluno@demo.com',
+        senha: '123456',
+        papel: 'ALUNO' as const,
+        alunoId: 1
+      }
+    ];
 
-
-    // Primeiro, verificar usuários padrão
     let usuario = usuariosPadrao.find(u => u.email === email && u.senha === senha);
     
-    // Se não encontrou nos padrão, verificar nos usuários criados no sistema
     if (!usuario) {
-  const usuarioSistema = usuarios.find((u: any) => u.email === email);
-  if (usuarioSistema) {
-    const senhaArmazenada = senhas[usuarioSistema.id];
-    if (senhaArmazenada === senha) {
-      usuario = {
-        id: usuarioSistema.id,
-        nome: usuarioSistema.nome,
-        email: usuarioSistema.email,
-        senha: senhaArmazenada,
-        papel: usuarioSistema.papel,
-        alunoId: usuarioSistema.alunoId,
-        professorId: usuarioSistema.professorId
-      };
+      const usuarioSistema = usuarios.find((u: any) => u.email === email);
+      if (usuarioSistema) {
+        const senhaArmazenada = senhas[usuarioSistema.id];
+        if (senhaArmazenada === senha) {
+          usuario = {
+            id: usuarioSistema.id,
+            nome: usuarioSistema.nome,
+            email: usuarioSistema.email,
+            senha: senhaArmazenada,
+            papel: usuarioSistema.papel,
+            alunoId: usuarioSistema.alunoId,
+            professorId: usuarioSistema.professorId
+          };
+        }
+      }
     }
-  }
-}
-
     
     if (!usuario) {
       return { success: false, error: 'Email ou senha inválidos' };
     }
 
     const user: User = {
-  id: usuario.id,
-  nome: usuario.nome,
-  email: usuario.email,
-  papel: usuario.papel,
-  alunoId: usuario.alunoId,
-  professorId: usuario.professorId
-};
-
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      papel: usuario.papel,
+      alunoId: usuario.alunoId,
+      professorId: usuario.professorId
+    };
 
     try {
-      localStorage.setItem(this.storageKey, JSON.stringify(user));
-      // Atualizar cache
+      safeStorage.setItem(this.storageKey, JSON.stringify(user));
       this.cachedAuthState = { user, isAuthenticated: true };
       return { success: true, user };
     } catch (error) {
-      console.error('Erro ao salvar auth no localStorage:', error);
+      console.error('Erro ao salvar auth:', error);
       return { success: false, error: 'Erro ao salvar sessão' };
     }
   }
 
   logout(): void {
     try {
-      localStorage.removeItem(this.storageKey);
-      // Limpar cache
+      safeStorage.removeItem(this.storageKey);
       this.cachedAuthState = null;
     } catch (error) {
-      console.error('Erro ao limpar auth do localStorage:', error);
+      console.error('Erro ao limpar auth:', error);
     }
   }
 
   getRedirectPath(papel: string): string {
     switch (papel) {
-      case 'COORDENADOR':
-        return '/app/admin';
-      case 'PROFESSOR':
-        return '/app/professor';
-      case 'ALUNO':
-        return '/app/aluno';
-      default:
-        return '/';
+      case 'COORDENADOR': return '/app/admin';
+      case 'PROFESSOR': return '/app/professor';
+      case 'ALUNO': return '/app/aluno';
+      default: return '/';
     }
   }
 
@@ -186,7 +208,6 @@ class AuthService {
   }
 
   canAccessDiario(userId: number, diarioId: number): boolean {
-    // Mock: Professor só acessa diário ID 1
     if (userId === 2 && diarioId === 1) return true;
     return false;
   }
