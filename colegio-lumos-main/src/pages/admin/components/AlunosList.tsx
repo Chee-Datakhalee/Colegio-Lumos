@@ -191,7 +191,7 @@ export function AlunosList() {
       email: formData.email,
       data_nascimento: formData.dataNascimento,
       cpf: formData.cpf,
-      turma_id: formData.turmaId ? Number(formData.turmaId) : undefined
+      turma_id: formData.turmaId ? Number(formData.turmaId) : null
     };
 
     try {
