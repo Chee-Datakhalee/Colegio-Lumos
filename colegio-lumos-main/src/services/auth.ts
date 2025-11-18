@@ -15,7 +15,7 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
-const USE_SUPABASE = true; // Muda para false se quiser voltar pro mock
+const USE_SUPABASE = true;
 
 class AuthService {
   private storageKey = 'gestao_escolar_auth';
@@ -70,8 +70,12 @@ class AuthService {
   }
 
   async login(email: string, senha: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    console.log('🔍 USE_SUPABASE:', USE_SUPABASE);
+    console.log('📧 Email:', email);
+    
     // MODO SUPABASE
     if (USE_SUPABASE) {
+      console.log('✅ Tentando login no Supabase...');
       try {
         const { data: usuarios, error: userError } = await supabase
           .from('usuarios')
@@ -79,7 +83,11 @@ class AuthService {
           .eq('email', email)
           .single();
 
+        console.log('📊 Usuário encontrado:', usuarios);
+        console.log('❌ Erro ao buscar usuário:', userError);
+
         if (userError || !usuarios) {
+          console.log('⚠️ Usuário não encontrado ou erro');
           return { success: false, error: 'Email ou senha inválidos' };
         }
 
@@ -89,9 +97,16 @@ class AuthService {
           .eq('usuario_id', usuarios.id)
           .single();
 
+        console.log('🔐 Senha no banco:', senhaData?.senha_hash);
+        console.log('🔑 Senha digitada:', senha);
+        console.log('❌ Erro ao buscar senha:', senhaError);
+
         if (senhaError || !senhaData || senhaData.senha_hash !== senha) {
+          console.log('⚠️ Senha incorreta');
           return { success: false, error: 'Email ou senha inválidos' };
         }
+
+        console.log('🎉 Login com sucesso no Supabase!');
 
         const user: User = {
           id: usuarios.id,
@@ -106,10 +121,12 @@ class AuthService {
         this.cachedAuthState = { user, isAuthenticated: true };
         return { success: true, user };
       } catch (error) {
-        console.error('Erro no login Supabase:', error);
+        console.error('💥 Erro no login Supabase:', error);
         return { success: false, error: 'Erro ao fazer login' };
       }
     }
+
+    console.log('⚠️ Usando modo MOCK');
 
     // MODO MOCK (fallback)
     const usuarios = this.getUsuariosFromStorage();
