@@ -599,6 +599,58 @@ class SupabaseService {
     const soma = notasDoDiario.reduce((acc, nota) => acc + nota.valor, 0);
     return soma / notasDoDiario.length;
   }
+
+  // PROFESSOR-DISCIPLINA (Vínculos)
+  async vincularProfessorDisciplina(professorId: number, disciplinaId: number): Promise<void> {
+    const { error } = await supabase
+      .from('professor_disciplinas')
+      .insert([{ professor_id: professorId, disciplina_id: disciplinaId }]);
+    if (error) throw error;
+  }
+
+  async desvincularProfessorDisciplina(professorId: number, disciplinaId: number): Promise<void> {
+    const { error } = await supabase
+      .from('professor_disciplinas')
+      .delete()
+      .eq('professor_id', professorId)
+      .eq('disciplina_id', disciplinaId);
+    if (error) throw error;
+  }
+
+  async getDisciplinasByProfessor(professorId: number): Promise<number[]> {
+    const { data, error } = await supabase
+      .from('professor_disciplinas')
+      .select('disciplina_id')
+      .eq('professor_id', professorId);
+    if (error) {
+      console.error('Erro ao buscar disciplinas do professor:', error);
+      throw error;
+    }
+    return data?.map(d => d.disciplina_id) || [];
+  }
+
+  async getProfessoresByDisciplina(disciplinaId: number): Promise<number[]> {
+    const { data, error } = await supabase
+      .from('professor_disciplinas')
+      .select('professor_id')
+      .eq('disciplina_id', disciplinaId);
+    if (error) {
+      console.error('Erro ao buscar professores da disciplina:', error);
+      throw error;
+    }
+    return data?.map(d => d.professor_id) || [];
+  }
+
+  async getVinculosProfessorDisciplina(): Promise<{ professor_id: number; disciplina_id: number }[]> {
+    const { data, error } = await supabase
+      .from('professor_disciplinas')
+      .select('professor_id, disciplina_id');
+    if (error) {
+      console.error('Erro ao buscar vínculos:', error);
+      throw error;
+    }
+    return data || [];
+  }
 }
 
 export const supabaseService = new SupabaseService();
