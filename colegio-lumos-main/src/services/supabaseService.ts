@@ -5,10 +5,10 @@ import { supabase } from '@/lib/supabaseClient';
 // =============================================
 
 export interface Turma {
-  id: number; 
+  id: number;
   nome: string;
   ano: number;
-  turno: string; // 'MATUTINO' | 'VESPERTINO' | 'NOTURNO'
+  turno: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -60,11 +60,25 @@ export interface Usuario {
 
 export interface Diario {
   id: number;
+  nome?: string;
   turma_id?: number;
   disciplina_id?: number;
   professor_id?: number;
   ano: number;
-  status?: string; // 'EM_ANDAMENTO' | 'FINALIZADO' | 'CANCELADO'
+  bimestre?: number;
+  dataInicio?: string;
+  dataTermino?: string;
+  status?: string;
+  solicitacaoDevolucao?: {
+    comentario: string;
+    dataSolicitacao: string;
+  };
+  historicoStatus?: {
+    status: string;
+    data: string;
+    usuario: string;
+    observacao?: string;
+  }[];
   created_at?: string;
   updated_at?: string;
 }
@@ -334,13 +348,13 @@ class SupabaseService {
     return data || [];
   }
 
-  async createDiario(diario: Omit<Diario, 'id' | 'created_at' | 'updated_at'>): Promise<Diario> {
+  async createDiario(diario: any): Promise<Diario> {
     const { data, error } = await supabase.from('diarios').insert([diario]).select().single();
     if (error) throw error;
     return data;
   }
 
-  async updateDiario(id: number, diario: Partial<Diario>): Promise<Diario> {
+  async updateDiario(id: number, diario: any): Promise<Diario> {
     const { data, error } = await supabase.from('diarios').update(diario).eq('id', id).select().single();
     if (error) throw error;
     return data;
@@ -349,6 +363,42 @@ class SupabaseService {
   async deleteDiario(id: number): Promise<void> {
     const { error } = await supabase.from('diarios').delete().eq('id', id);
     if (error) throw error;
+  }
+
+  // Funções de controle de diário (BÁSICAS - só mudam status)
+  async devolverDiario(diarioId: number, usuarioId: number, observacao?: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('diarios')
+        .update({ status: 'DEVOLVIDO' })
+        .eq('id', diarioId);
+      
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao devolver diário:', error);
+      return false;
+    }
+  }
+
+  async finalizarDiario(diarioId: number, usuarioId: number): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('diarios')
+        .update({ status: 'FINALIZADO' })
+        .eq('id', diarioId);
+      
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao finalizar diário:', error);
+      return false;
+    }
+  }
+
+  coordenadorPodeGerenciarDiario(diarioId: number): { canDevolver: boolean; canFinalizar: boolean } {
+    // Por enquanto retorna sempre true - implementação básica
+    return { canDevolver: true, canFinalizar: true };
   }
 
   // DIÁRIO ALUNOS (Vincular alunos ao diário)
@@ -525,7 +575,7 @@ class SupabaseService {
   }
 
   async updateOcorrencia(id: number, ocorrencia: Partial<Ocorrencia>): Promise<Ocorrencia> {
-    const { data, error } = await supabase.from('ocorrencias').update(ocorrencia).eq('id', id).select().single();
+    const { data, error} = await supabase.from('ocorrencias').update(ocorrencia).eq('id', id).select().single();
     if (error) throw error;
     return data;
   }
