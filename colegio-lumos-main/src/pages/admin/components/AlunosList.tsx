@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
-import { supabaseService } from '../../../services/supabase';
-import type { Aluno, Usuario, Turma } from '../../../services/supabase';
+import { supabaseService } from '../../../services/supabaseService';
+import type { Aluno, Usuario, Turma } from '../../../services/supabaseService';
 import { BoletimModal } from '../../../components/shared/BoletimModal';
 
 // Componente otimizado para avatar do aluno
