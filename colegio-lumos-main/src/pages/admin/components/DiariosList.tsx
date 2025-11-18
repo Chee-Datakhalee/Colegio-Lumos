@@ -16,6 +16,7 @@ export function DiariosList() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [professores, setProfessores] = useState<Usuario[]>([]);
+  const [professoresFiltrados, setProfessoresFiltrados] = useState<Usuario[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
@@ -74,6 +75,34 @@ export function DiariosList() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Filtrar professores quando disciplina é selecionada
+  useEffect(() => {
+    const filtrarProfessores = async () => {
+      if (!formData.disciplinaId) {
+        setProfessoresFiltrados(professores);
+        return;
+      }
+
+      try {
+        const professoresIds = await supabaseService.getProfessoresByDisciplina(Number(formData.disciplinaId));
+        const professoresDaDisciplina = professores.filter(p => 
+          p.professor_id && professoresIds.includes(p.professor_id)
+        );
+        setProfessoresFiltrados(professoresDaDisciplina);
+        
+        // Limpar professor selecionado se não está na lista filtrada
+        if (formData.professorId && !professoresIds.includes(Number(formData.professorId))) {
+          setFormData(prev => ({ ...prev, professorId: '' }));
+        }
+      } catch (error) {
+        console.error('Erro ao filtrar professores:', error);
+        setProfessoresFiltrados(professores);
+      }
+    };
+
+    filtrarProfessores();
+  }, [formData.disciplinaId, professores, formData.professorId]);
 
   // Filtros ultra-otimizados - cache de cálculos pesados
   const filteredDiarios = useMemo(() => {
@@ -421,18 +450,29 @@ export function DiariosList() {
                       <Select 
                         value={formData.professorId} 
                         onValueChange={(value) => setFormData({ ...formData, professorId: value })}
+                        disabled={!formData.disciplinaId}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Professor" />
+                          <SelectValue placeholder={formData.disciplinaId ? "Professor" : "Selecione disciplina primeiro"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {professores.map((professor) => (
-                            <SelectItem key={professor.id} value={professor.id.toString()}>
+                          {professoresFiltrados.length === 0 && formData.disciplinaId && (
+                            <div className="p-2 text-sm text-gray-500 text-center">
+                              Nenhum professor vinculado a esta disciplina
+                            </div>
+                          )}
+                          {professoresFiltrados.map((professor) => (
+                            <SelectItem key={professor.id} value={professor.professor_id?.toString() || ''}>
                               {professor.nome}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {formData.disciplinaId && professoresFiltrados.length === 0 && (
+                        <p className="text-xs text-orange-600 mt-1">
+                          Vincule professores à disciplina em "Professor-Disciplina"
+                        </p>
+                      )}
                     </div>
 
                     <div>
