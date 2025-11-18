@@ -5,7 +5,7 @@ export interface User {
   id: number;
   nome: string;
   email: string;
-  papel: 'COORDENADOR' | 'PROFESSOR' | 'ALUNO'; 
+  papel: 'COORDENADOR' | 'PROFESSOR' | 'ALUNO';
   alunoId?: number;
   professorId?: number;
 }
