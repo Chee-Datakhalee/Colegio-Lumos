@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Edit, Trash2, Users, Filter, CheckCircle, Clock, RotateCcw, XCircle, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -9,7 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
-import { mockDataService, Diario, Turma, Disciplina, Usuario } from '../../../services/mockData';
+import { supabaseService } from '../../../services/supabaseService';
+import type { Diario, Turma, Disciplina, Usuario } from '../../../services/supabaseService';
 
 export function DiariosList() {
   const [diarios, setDiarios] = useState<Diario[]>([]);
@@ -25,6 +25,7 @@ export function DiariosList() {
   const [selectedDiario, setSelectedDiario] = useState<Diario | null>(null);
   const [observacaoDevolucao, setObservacaoDevolucao] = useState('');
   const [currentUser, setCurrentUser] = useState<Usuario | null>(null);
+  const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
     disciplina: '',
     turma: '',
@@ -43,16 +44,30 @@ export function DiariosList() {
     dataTermino: ''
   });
 
-  const loadData = useCallback(() => {
-    setDiarios(mockDataService.getDiarios());
-    setTurmas(mockDataService.getTurmas());
-    setDisciplinas(mockDataService.getDisciplinas());
-    setProfessores(mockDataService.getUsuarios().filter(u => u.papel === 'PROFESSOR'));
-    
-    // Carregar usuário atual
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setCurrentUser(JSON.parse(userData));
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [diariosData, turmasData, disciplinasData, usuariosData] = await Promise.all([
+        supabaseService.getDiarios(),
+        supabaseService.getTurmas(),
+        supabaseService.getDisciplinas(),
+        supabaseService.getUsuarios()
+      ]);
+      setDiarios(diariosData);
+      setTurmas(turmasData);
+      setDisciplinas(disciplinasData);
+      setProfessores(usuariosData.filter(u => u.papel === 'PROFESSOR'));
+      
+      // Carregar usuário atual
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        setCurrentUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      alert('Erro ao carregar dados. Verifique sua conexão.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -68,19 +83,19 @@ export function DiariosList() {
 
     return diarios.filter(diario => {
       // Filtro de busca simples primeiro
-      if (searchTerm && !diario.nome.toLowerCase().includes(searchTerm.toLowerCase())) {
+      if (searchTerm && diario.nome && !diario.nome.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
 
       // Filtros simples primeiro
       if (filters.disciplina && filters.disciplina !== 'all' && 
-          diario.disciplinaId.toString() !== filters.disciplina) return false;
+          diario.disciplina_id?.toString() !== filters.disciplina) return false;
       
       if (filters.turma && filters.turma !== 'all' && 
-          diario.turmaId.toString() !== filters.turma) return false;
+          diario.turma_id?.toString() !== filters.turma) return false;
       
       if (filters.professor && filters.professor !== 'all' && 
-          diario.professorId.toString() !== filters.professor) return false;
+          diario.professor_id?.toString() !== filters.professor) return false;
       
       if (filters.bimestre && filters.bimestre !== 'all' && diario.bimestre && 
           diario.bimestre.toString() !== filters.bimestre) return false;
@@ -90,7 +105,7 @@ export function DiariosList() {
           diario.status !== filters.statusDiario) return false;
 
       // Status baseado nas datas - cálculo mais pesado por último
-      if (filters.status && filters.status !== 'all') {
+      if (filters.status && filters.status !== 'all' && diario.dataInicio && diario.dataTermino) {
         const hoje = new Date();
         const dataInicio = new Date(diario.dataInicio);
         const dataTermino = new Date(diario.dataTermino);
@@ -104,37 +119,46 @@ export function DiariosList() {
     });
   }, [diarios, searchTerm, filters]);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
     const data = {
       nome: formData.nome,
-      disciplinaId: Number(formData.disciplinaId),
-      turmaId: Number(formData.turmaId),
-      professorId: Number(formData.professorId),
+      disciplina_id: Number(formData.disciplinaId),
+      turma_id: Number(formData.turmaId),
+      professor_id: Number(formData.professorId),
       bimestre: Number(formData.bimestre),
       dataInicio: formData.dataInicio,
       dataTermino: formData.dataTermino,
-      status: 'PENDENTE' as const
+      status: 'PENDENTE',
+      ano: new Date().getFullYear()
     };
 
-    if (editingDiario) {
-      mockDataService.updateDiario(editingDiario.id, data);
-    } else {
-      mockDataService.createDiario(data);
+    try {
+      setLoading(true);
+      if (editingDiario) {
+        await supabaseService.updateDiario(editingDiario.id, data);
+      } else {
+        await supabaseService.createDiario(data);
+      }
+      await loadData();
+      resetForm();
+      alert(editingDiario ? 'Diário atualizado com sucesso!' : 'Diário criado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar diário:', error);
+      alert('Erro ao salvar diário. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
-
-    loadData();
-    resetForm();
   }, [formData, editingDiario, loadData]);
 
   const handleEdit = useCallback((diario: Diario) => {
     setEditingDiario(diario);
     setFormData({
-      nome: diario.nome,
-      disciplinaId: diario.disciplinaId.toString(),
-      turmaId: diario.turmaId.toString(),
-      professorId: diario.professorId.toString(),
+      nome: diario.nome || '',
+      disciplinaId: diario.disciplina_id?.toString() || '',
+      turmaId: diario.turma_id?.toString() || '',
+      professorId: diario.professor_id?.toString() || '',
       bimestre: diario.bimestre ? diario.bimestre.toString() : '1',
       dataInicio: diario.dataInicio || '',
       dataTermino: diario.dataTermino || ''
@@ -142,39 +166,66 @@ export function DiariosList() {
     setIsDialogOpen(true);
   }, []);
 
-  const handleDelete = useCallback((id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     if (confirm('Tem certeza que deseja excluir este diário?')) {
-      mockDataService.deleteDiario(id);
-      loadData();
+      try {
+        setLoading(true);
+        await supabaseService.deleteDiario(id);
+        await loadData();
+        alert('Diário excluído com sucesso!');
+      } catch (error) {
+        console.error('Erro ao excluir diário:', error);
+        alert('Erro ao excluir diário. Tente novamente.');
+      } finally {
+        setLoading(false);
+      }
     }
   }, [loadData]);
 
-  const handleDevolverDiario = useCallback(() => {
+  const handleDevolverDiario = useCallback(async () => {
     if (!selectedDiario || !currentUser) return;
     
-    const sucesso = mockDataService.devolverDiario(
-      selectedDiario.id, 
-      currentUser.id, 
-      observacaoDevolucao
-    );
-    
-    if (sucesso) {
-      loadData();
-      setIsDevolverDialogOpen(false);
-      setObservacaoDevolucao('');
-      setSelectedDiario(null);
+    try {
+      setLoading(true);
+      const sucesso = await supabaseService.devolverDiario(
+        selectedDiario.id, 
+        currentUser.id, 
+        observacaoDevolucao
+      );
+      
+      if (sucesso) {
+        await loadData();
+        setIsDevolverDialogOpen(false);
+        setObservacaoDevolucao('');
+        setSelectedDiario(null);
+        alert('Diário devolvido com sucesso!');
+      }
+    } catch (error) {
+      console.error('Erro ao devolver diário:', error);
+      alert('Erro ao devolver diário. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
   }, [selectedDiario, currentUser, observacaoDevolucao, loadData]);
 
-  const handleFinalizarDiario = useCallback(() => {
+  const handleFinalizarDiario = useCallback(async () => {
     if (!selectedDiario || !currentUser) return;
     
-    const sucesso = mockDataService.finalizarDiario(selectedDiario.id, currentUser.id);
-    
-    if (sucesso) {
-      loadData();
-      setIsFinalizarDialogOpen(false);
-      setSelectedDiario(null);
+    try {
+      setLoading(true);
+      const sucesso = await supabaseService.finalizarDiario(selectedDiario.id, currentUser.id);
+      
+      if (sucesso) {
+        await loadData();
+        setIsFinalizarDialogOpen(false);
+        setSelectedDiario(null);
+        alert('Diário finalizado com sucesso!');
+      }
+    } catch (error) {
+      console.error('Erro ao finalizar diário:', error);
+      alert('Erro ao finalizar diário. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
   }, [selectedDiario, currentUser, loadData]);
 
@@ -212,19 +263,25 @@ export function DiariosList() {
   }, [filters]);
 
   // Cache de nomes para evitar buscas repetidas
-  const getTurmaNome = useCallback((turmaId: number) => {
+  const getTurmaNome = useCallback((turmaId?: number) => {
+    if (!turmaId) return 'N/A';
     return turmas.find(t => t.id === turmaId)?.nome || 'N/A';
   }, [turmas]);
 
-  const getDisciplinaNome = useCallback((disciplinaId: number) => {
+  const getDisciplinaNome = useCallback((disciplinaId?: number) => {
+    if (!disciplinaId) return 'N/A';
     return disciplinas.find(d => d.id === disciplinaId)?.nome || 'N/A';
   }, [disciplinas]);
 
-  const getProfessorNome = useCallback((professorId: number) => {
+  const getProfessorNome = useCallback((professorId?: number) => {
+    if (!professorId) return 'N/A';
     return professores.find(p => p.id === professorId)?.nome || 'N/A';
   }, [professores]);
 
   const getStatusDiario = useCallback((diario: Diario) => {
+    if (!diario.dataInicio || !diario.dataTermino) {
+      return { label: 'Sem data', variant: 'secondary' as const };
+    }
     const hoje = new Date();
     const dataInicio = new Date(diario.dataInicio);
     const dataTermino = new Date(diario.dataTermino);
@@ -234,7 +291,7 @@ export function DiariosList() {
     return { label: 'Ativo', variant: 'default' as const };
   }, []);
 
-  const getStatusDiarioInfo = useCallback((status: string) => {
+  const getStatusDiarioInfo = useCallback((status?: string) => {
     switch (status) {
       case 'PENDENTE':
         return { 
@@ -276,14 +333,14 @@ export function DiariosList() {
 
   const canManageDiario = useCallback((diario: Diario) => {
     if (!currentUser || currentUser.papel !== 'COORDENADOR') return { canDevolver: false, canFinalizar: false };
-    return mockDataService.coordenadorPodeGerenciarDiario(diario.id);
+    return supabaseService.coordenadorPodeGerenciarDiario(diario.id);
   }, [currentUser]);
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div class="space-y-2">
+          <div className="space-y-2">
             <h3 className="card-title">Diários</h3>
             <p className="card-description">
               Gerencie os diários de classe e controle o status de entrega
@@ -424,8 +481,8 @@ export function DiariosList() {
                   <Button type="button" variant="outline" onClick={resetForm}>
                     Cancelar
                   </Button>
-                  <Button type="submit">
-                    {editingDiario ? 'Salvar Alterações' : 'Criar Diário'}
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Salvando...' : (editingDiario ? 'Salvar Alterações' : 'Criar Diário')}
                   </Button>
                 </DialogFooter>
               </form>
@@ -593,110 +650,120 @@ export function DiariosList() {
           </Dialog>
         </div>
         
-        <div className="space-y-4">
-          {filteredDiarios.map((diario) => {
-            const status = getStatusDiario(diario);
-            const statusDiario = getStatusDiarioInfo(diario.status);
-            const StatusIcon = statusDiario.icon;
-            const permissions = canManageDiario(diario);
-            
-            return (
-              <div key={diario.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-4 border rounded-lg">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h3 className="font-medium">{diario.nome}</h3>
-                    <Badge variant="outline">{diario.bimestre}º Bimestre</Badge>
-                    <Badge variant={status.variant}>{status.label}</Badge>
-                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusDiario.color}`}>
-                      <StatusIcon className="h-3 w-3" />
-                      {statusDiario.label}
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-600">
-                    <span>Disciplina: {getDisciplinaNome(diario.disciplinaId)}</span>
-                    <span>Turma: {getTurmaNome(diario.turmaId)}</span>
-                    <span>Professor: {getProfessorNome(diario.professorId)}</span>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1 text-sm text-gray-500">
-                    <span>Início: {new Date(diario.dataInicio).toLocaleDateString('pt-BR')}</span>
-                    <span>Término: {new Date(diario.dataTermino).toLocaleDateString('pt-BR')}</span>
-                  </div>
-                  {diario.solicitacaoDevolucao && (
-                    <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
-                      <div className="flex items-center gap-1 text-orange-800 font-medium">
-                        <AlertCircle className="h-4 w-4" />
-                        Solicitação de Devolução
+        {loading && (
+          <div className="text-center py-8 text-gray-500">
+            <p>Carregando...</p>
+          </div>
+        )}
+
+        {!loading && (
+          <div className="space-y-4">
+            {filteredDiarios.map((diario) => {
+              const status = getStatusDiario(diario);
+              const statusDiario = getStatusDiarioInfo(diario.status);
+              const StatusIcon = statusDiario.icon;
+              const permissions = canManageDiario(diario);
+              
+              return (
+                <div key={diario.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h3 className="font-medium">{diario.nome || 'Sem nome'}</h3>
+                      {diario.bimestre && <Badge variant="outline">{diario.bimestre}º Bimestre</Badge>}
+                      <Badge variant={status.variant}>{status.label}</Badge>
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusDiario.color}`}>
+                        <StatusIcon className="h-3 w-3" />
+                        {statusDiario.label}
                       </div>
-                      <p className="text-orange-700 mt-1">{diario.solicitacaoDevolucao.comentario}</p>
-                      <p className="text-orange-600 text-xs mt-1">
-                        Solicitado em: {new Date(diario.solicitacaoDevolucao.dataSolicitacao).toLocaleDateString('pt-BR')}
-                      </p>
                     </div>
-                  )}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-600">
+                      <span>Disciplina: {getDisciplinaNome(diario.disciplina_id)}</span>
+                      <span>Turma: {getTurmaNome(diario.turma_id)}</span>
+                      <span>Professor: {getProfessorNome(diario.professor_id)}</span>
+                    </div>
+                    {diario.dataInicio && diario.dataTermino && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1 text-sm text-gray-500">
+                        <span>Início: {new Date(diario.dataInicio).toLocaleDateString('pt-BR')}</span>
+                        <span>Término: {new Date(diario.dataTermino).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    )}
+                    {diario.solicitacaoDevolucao && (
+                      <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
+                        <div className="flex items-center gap-1 text-orange-800 font-medium">
+                          <AlertCircle className="h-4 w-4" />
+                          Solicitação de Devolução
+                        </div>
+                        <p className="text-orange-700 mt-1">{diario.solicitacaoDevolucao.comentario}</p>
+                        <p className="text-orange-600 text-xs mt-1">
+                          Solicitado em: {new Date(diario.solicitacaoDevolucao.dataSolicitacao).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                    {/* Ações do Coordenador */}
+                    {currentUser?.papel === 'COORDENADOR' && (
+                      <>
+                        {permissions.canDevolver && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="inline-flex items-center gap-1 whitespace-nowrap"
+                            onClick={() => {
+                              setSelectedDiario(diario);
+                              setIsDevolverDialogOpen(true);
+                            }}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            Devolver
+                          </Button>
+                        )}
+                        {permissions.canFinalizar && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="inline-flex items-center gap-1 whitespace-nowrap"
+                            onClick={() => {
+                              setSelectedDiario(diario);
+                              setIsFinalizarDialogOpen(true);
+                            }}
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            Finalizar
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    
+                    <Button
+                      variant="outline"
+                      size="none"
+                    className="h-8 w-8 p-0 inline-flex items-center justify-center"
+                      onClick={() => handleEdit(diario)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="none"
+                    className="h-8 w-8 p-0 inline-flex items-center justify-center"
+                      onClick={() => handleDelete(diario.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-                  {/* Ações do Coordenador */}
-                  {currentUser?.papel === 'COORDENADOR' && (
-                    <>
-                      {permissions.canDevolver && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="inline-flex items-center gap-1 whitespace-nowrap"
-                          onClick={() => {
-                            setSelectedDiario(diario);
-                            setIsDevolverDialogOpen(true);
-                          }}
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                          Devolver
-                        </Button>
-                      )}
-                      {permissions.canFinalizar && (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="inline-flex items-center gap-1 whitespace-nowrap"
-                          onClick={() => {
-                            setSelectedDiario(diario);
-                            setIsFinalizarDialogOpen(true);
-                          }}
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                          Finalizar
-                        </Button>
-                      )}
-                    </>
-                  )}
-                  
-                  <Button
-                    variant="outline"
-                    size="none"
-                  className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                    onClick={() => handleEdit(diario)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="none"
-                  className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                    onClick={() => handleDelete(diario.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+              );
+            })}
+            
+            {filteredDiarios.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhum diário encontrado</p>
               </div>
-            );
-          })}
-          
-          {filteredDiarios.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhum diário encontrado</p>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </CardContent>
 
       {/* Modal de Devolução */}
@@ -732,8 +799,8 @@ export function DiariosList() {
             >
               Cancelar
             </Button>
-            <Button type="button" variant="destructive" onClick={handleDevolverDiario}>
-              Devolver Diário
+            <Button type="button" variant="destructive" onClick={handleDevolverDiario} disabled={loading}>
+              {loading ? 'Devolvendo...' : 'Devolver Diário'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -759,8 +826,8 @@ export function DiariosList() {
             >
               Cancelar
             </Button>
-            <Button type="button" onClick={handleFinalizarDiario}>
-              Finalizar Diário
+            <Button type="button" onClick={handleFinalizarDiario} disabled={loading}>
+              {loading ? 'Finalizando...' : 'Finalizar Diário'}
             </Button>
           </DialogFooter>
         </DialogContent>
