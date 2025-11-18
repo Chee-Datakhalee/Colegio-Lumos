@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 // =============================================
 
 export interface Turma {
-  id: number;
+  id: number; 
   nome: string;
   ano: number;
   turno: string; // 'MATUTINO' | 'VESPERTINO' | 'NOTURNO'
