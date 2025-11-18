@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
-import { mockDataService, Aluno, Usuario, Turma } from '../../../services/mockData';
+import { supabaseService } from '../../../services/supabase';
+import type { Aluno, Usuario, Turma } from '../../../services/supabase';
 import { BoletimModal } from '../../../components/shared/BoletimModal';
 
 // Componente otimizado para avatar do aluno
@@ -23,7 +24,7 @@ const AlunoAvatar = ({ aluno }: { aluno: Aluno }) => {
     setImageLoaded(true);
   }, []);
   
-  if (!aluno.foto || imageError) {
+  if (imageError) {
     return (
       <div className="w-12 h-12 rounded-full bg-gray-100 border-1 border-gray-200 flex items-center justify-center flex-shrink-0">
         <Users className="h-6 w-6 text-gray-400" />
@@ -39,7 +40,7 @@ const AlunoAvatar = ({ aluno }: { aluno: Aluno }) => {
         </div>
       )}
       <img
-        src={aluno.foto}
+        src="https://via.placeholder.com/150"
         alt={aluno.nome}
         className={`w-full h-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
         onError={handleImageError}
@@ -59,6 +60,7 @@ export function AlunosList() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [editingAluno, setEditingAluno] = useState<Aluno | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   // Estados para o boletim - otimizado
   const [isBoletimModalOpen, setIsBoletimModalOpen] = useState(false);
@@ -105,10 +107,23 @@ export function AlunosList() {
     foto: ''
   });
 
-  const loadData = useCallback(() => {
-    setAlunos(mockDataService.getAlunos());
-    setUsuarios(mockDataService.getUsuarios());
-    setTurmas(mockDataService.getTurmas());
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [alunosData, usuariosData, turmasData] = await Promise.all([
+        supabaseService.getAlunos(),
+        supabaseService.getUsuarios(),
+        supabaseService.getTurmas()
+      ]);
+      setAlunos(alunosData);
+      setUsuarios(usuariosData);
+      setTurmas(turmasData);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      alert('Erro ao carregar dados. Verifique sua conexão.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -130,22 +145,15 @@ export function AlunosList() {
 
       // Filtros específicos apenas se necessário
       if (filters.turmaId && filters.turmaId !== 'all' && 
-          (aluno as any).turmaId?.toString() !== filters.turmaId) return false;
+          aluno.turma_id?.toString() !== filters.turmaId) return false;
       
-      if (filters.anoLetivo && filters.anoLetivo !== 'all' && 
-          (aluno as any).anoLetivo !== filters.anoLetivo) return false;
-      
-      if (filters.situacao && filters.situacao !== 'all' && 
-          (aluno as any).situacao !== filters.situacao) return false;
-
-      // Filtros mais pesados apenas no final
       if (filters.turno && filters.turno !== 'all') {
-        const turmaAluno = turmas.find(t => t.id === (aluno as any).turmaId);
+        const turmaAluno = turmas.find(t => t.id === aluno.turma_id);
         if (!turmaAluno || turmaAluno.turno !== filters.turno) return false;
       }
 
       if (filters.temUsuario && filters.temUsuario !== 'all') {
-        const usuarioVinculado = usuarios.some(u => u.alunoId === aluno.id);
+        const usuarioVinculado = usuarios.some(u => u.aluno_id === aluno.id);
         if (filters.temUsuario === 'sim' && !usuarioVinculado) return false;
         if (filters.temUsuario === 'nao' && usuarioVinculado) return false;
       }
@@ -168,7 +176,7 @@ export function AlunosList() {
     return Object.values(filters).some(value => value !== '' && value !== 'all');
   }, [filters]);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (formData.criarUsuario && !editingAluno && !formData.senhaUsuario) {
@@ -179,48 +187,43 @@ export function AlunosList() {
     const alunoData = {
       nome: formData.nome,
       matricula: formData.matricula,
-      contato: formData.contato,
+      telefone: formData.contato,
       email: formData.email,
-      dataNascimento: formData.dataNascimento,
+      data_nascimento: formData.dataNascimento,
       cpf: formData.cpf,
-      rg: formData.rg,
-      sexo: formData.sexo,
-      endereco: formData.endereco,
-      bairro: formData.bairro,
-      cidade: formData.cidade,
-      cep: formData.cep,
-      estado: formData.estado,
-      nomeResponsavel: formData.nomeResponsavel,
-      contatoResponsavel: formData.contatoResponsavel,
-      emailResponsavel: formData.emailResponsavel,
-      parentesco: formData.parentesco,
-      turmaId: formData.turmaId ? Number(formData.turmaId) : undefined,
-      anoLetivo: formData.anoLetivo,
-      situacao: formData.situacao,
-      observacoes: formData.observacoes,
-      foto: selectedImage || formData.foto || ''
+      turma_id: formData.turmaId ? Number(formData.turmaId) : undefined
     };
 
-    let aluno;
-    if (editingAluno) {
-      aluno = mockDataService.updateAluno(editingAluno.id, alunoData);
-    } else {
-      aluno = mockDataService.createAluno(alunoData);
-    }
+    try {
+      setLoading(true);
+      let aluno;
+      if (editingAluno) {
+        aluno = await supabaseService.updateAluno(editingAluno.id, alunoData);
+      } else {
+        aluno = await supabaseService.createAluno(alunoData);
+      }
 
-    if (formData.criarUsuario && aluno && formData.senhaUsuario && !editingAluno) {
-      const usuarioData = {
-        nome: formData.nome,
-        email: formData.email,
-        papel: 'ALUNO' as const,
-        alunoId: aluno.id
-      };
-      
-      mockDataService.createUsuario(usuarioData, formData.senhaUsuario);
-    }
+      if (formData.criarUsuario && aluno && formData.senhaUsuario && !editingAluno) {
+        const usuarioData = {
+          nome: formData.nome,
+          email: formData.email,
+          papel: 'ALUNO' as const,
+          aluno_id: aluno.id,
+          ativo: true
+        };
+        
+        await supabaseService.createUsuario(usuarioData, formData.senhaUsuario);
+      }
 
-    loadData();
-    resetForm();
+      await loadData();
+      resetForm();
+      alert(editingAluno ? 'Aluno atualizado com sucesso!' : 'Aluno cadastrado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar aluno:', error);
+      alert('Erro ao salvar aluno. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   }, [formData, editingAluno, selectedImage, loadData]);
 
   const handleEdit = useCallback((aluno: any) => {
@@ -228,41 +231,50 @@ export function AlunosList() {
     setFormData({
       nome: aluno.nome || '',
       matricula: aluno.matricula || '',
-      contato: aluno.contato || '',
+      contato: aluno.telefone || '',
       email: aluno.email || '',
-      dataNascimento: aluno.dataNascimento || '',
+      dataNascimento: aluno.data_nascimento || '',
       cpf: aluno.cpf || '',
-      rg: aluno.rg || '',
-      sexo: aluno.sexo || '',
-      endereco: aluno.endereco || '',
-      bairro: aluno.bairro || '',
-      cidade: aluno.cidade || '',
-      cep: aluno.cep || '',
-      estado: aluno.estado || '',
-      nomeResponsavel: aluno.nomeResponsavel || '',
-      contatoResponsavel: aluno.contatoResponsavel || '',
-      emailResponsavel: aluno.emailResponsavel || '',
-      parentesco: aluno.parentesco || '',
-      turmaId: aluno.turmaId?.toString() || '',
-      anoLetivo: aluno.anoLetivo || '',
-      situacao: aluno.situacao || '',
-      observacoes: aluno.observacoes || '',
+      rg: '',
+      sexo: '',
+      endereco: '',
+      bairro: '',
+      cidade: '',
+      cep: '',
+      estado: '',
+      nomeResponsavel: '',
+      contatoResponsavel: '',
+      emailResponsavel: '',
+      parentesco: '',
+      turmaId: aluno.turma_id?.toString() || '',
+      anoLetivo: '',
+      situacao: '',
+      observacoes: '',
       criarUsuario: false,
       senhaUsuario: '',
-      foto: aluno.foto || ''
+      foto: ''
     });
-    setSelectedImage(aluno.foto || null);
+    setSelectedImage(null);
     setIsDialogOpen(true);
   }, []);
 
-  const handleDelete = useCallback((id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     if (confirm('Tem certeza que deseja excluir este aluno?')) {
-      const usuarioVinculado = usuarios.find(u => u.alunoId === id);
-      if (usuarioVinculado) {
-        mockDataService.deleteUsuario(usuarioVinculado.id);
+      try {
+        setLoading(true);
+        const usuarioVinculado = usuarios.find(u => u.aluno_id === id);
+        if (usuarioVinculado) {
+          await supabaseService.deleteUsuario(usuarioVinculado.id);
+        }
+        await supabaseService.deleteAluno(id);
+        await loadData();
+        alert('Aluno excluído com sucesso!');
+      } catch (error) {
+        console.error('Erro ao excluir aluno:', error);
+        alert('Erro ao excluir aluno. Tente novamente.');
+      } finally {
+        setLoading(false);
       }
-      mockDataService.deleteAluno(id);
-      loadData();
     }
   }, [usuarios, loadData]);
 
@@ -322,7 +334,7 @@ export function AlunosList() {
   }, [formData.senhaUsuario]);
 
   const getUsuarioVinculado = useCallback((alunoId: number) => {
-    return usuarios.find(u => u.alunoId === alunoId);
+    return usuarios.find(u => u.aluno_id === alunoId);
   }, [usuarios]);
 
   const getTurmaNome = useCallback((turmaId?: number) => {
@@ -407,7 +419,7 @@ export function AlunosList() {
     <div className="card">
       <div className="card-header">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div class="space-y-2">
+          <div className="space-y-2">
             <h3 className="card-title">Alunos</h3>
             <p className="card-description">Gerencie os alunos da escola</p>
           </div>
@@ -822,8 +834,8 @@ export function AlunosList() {
                   <Button type="button" variant="outline" onClick={resetForm}>
                     Cancelar
                   </Button>
-                  <Button type="submit">
-                    {editingAluno ? 'Salvar Alterações' : 'Cadastrar Aluno'}
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Salvando...' : (editingAluno ? 'Salvar Alterações' : 'Cadastrar Aluno')}
                   </Button>
                 </DialogFooter>
               </form>
@@ -889,10 +901,9 @@ export function AlunosList() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos os turnos</SelectItem>
-                      <SelectItem value="Manhã">Manhã</SelectItem>
-                      <SelectItem value="Tarde">Tarde</SelectItem>
-                      <SelectItem value="Noite">Noite</SelectItem>
-                      <SelectItem value="Integral">Integral</SelectItem>
+                      <SelectItem value="MATUTINO">Matutino</SelectItem>
+                      <SelectItem value="VESPERTINO">Vespertino</SelectItem>
+                      <SelectItem value="NOTURNO">Noturno</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -954,71 +965,79 @@ export function AlunosList() {
           </Dialog>
         </div>
 
-        <div className="space-y-4">
-          {filteredAlunos.map((aluno) => {
-            const usuarioVinculado = getUsuarioVinculado(aluno.id);
-            const turmaNome = getTurmaNome((aluno as any).turmaId);
-            return (
-              <div key={aluno.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-4 border rounded-lg">
-                <div className="flex items-center gap-4 flex-1">
-                  <AlunoAvatar aluno={aluno} />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-medium">{aluno.nome}</h3>
-                      {usuarioVinculado && (
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
-                          Usuário Ativo
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1 text-sm text-gray-600">
-                      <span>Matrícula: {aluno.matricula}</span>
-                      <span>Contato: {aluno.contato}</span>
-                      {(aluno as any).email && <span>Email: {(aluno as any).email}</span>}
-                      {turmaNome && <span>Turma: {turmaNome}</span>}
+        {loading && (
+          <div className="text-center py-8 text-gray-500">
+            <p>Carregando...</p>
+          </div>
+        )}
+
+        {!loading && (
+          <div className="space-y-4">
+            {filteredAlunos.map((aluno) => {
+              const usuarioVinculado = getUsuarioVinculado(aluno.id);
+              const turmaNome = getTurmaNome(aluno.turma_id);
+              return (
+                <div key={aluno.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-4 border rounded-lg">
+                  <div className="flex items-center gap-4 flex-1">
+                    <AlunoAvatar aluno={aluno} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h3 className="font-medium">{aluno.nome}</h3>
+                        {usuarioVinculado && (
+                          <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                            Usuário Ativo
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1 text-sm text-gray-600">
+                        <span>Matrícula: {aluno.matricula}</span>
+                        <span>Contato: {aluno.telefone || '-'}</span>
+                        {aluno.email && <span>Email: {aluno.email}</span>}
+                        {turmaNome && <span>Turma: {turmaNome}</span>}
+                      </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      variant="outline"
+                      size="none"
+                    className="h-8 w-8 p-0 inline-flex items-center justify-center"
+                      onClick={() => handleViewBoletim(aluno)}
+                      title="Ver Boletim"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="none"
+                    className="h-8 w-8 p-0 inline-flex items-center justify-center"
+                      onClick={() => handleEdit(aluno)}
+                      title="Editar"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="none"
+                    className="h-8 w-8 p-0 inline-flex items-center justify-center"
+                      onClick={() => handleDelete(aluno.id)}
+                      title="Excluir"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Button
-                    variant="outline"
-                    size="none"
-                  className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                    onClick={() => handleViewBoletim(aluno)}
-                    title="Ver Boletim"
-                  >
-                    <FileText className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="none"
-                  className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                    onClick={() => handleEdit(aluno)}
-                    title="Editar"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="none"
-                  className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                    onClick={() => handleDelete(aluno.id)}
-                    title="Excluir"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {filteredAlunos.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhum aluno encontrado</p>
-            </div>
-          )}
-        </div>
+            {filteredAlunos.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhum aluno encontrado</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Modal do Boletim */}
         {isBoletimModalOpen && selectedAlunoBoletim && (
