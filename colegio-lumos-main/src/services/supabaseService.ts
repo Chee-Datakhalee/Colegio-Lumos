@@ -1,14 +1,16 @@
 import { supabase } from '@/lib/supabaseClient';
 
 // =============================================
-// TIPOS
+// TIPOS ATUALIZADOS CONFORME BANCO DE DADOS
 // =============================================
 
 export interface Turma {
   id: number;
   nome: string;
   ano: number;
-  turno: 'MATUTINO' | 'VESPERTINO' | 'NOTURNO';
+  turno: string; // 'MATUTINO' | 'VESPERTINO' | 'NOTURNO'
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Disciplina {
@@ -16,6 +18,8 @@ export interface Disciplina {
   nome: string;
   codigo: string;
   carga_horaria: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Professor {
@@ -25,6 +29,8 @@ export interface Professor {
   telefone?: string;
   cpf?: string;
   data_nascimento?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Aluno {
@@ -36,6 +42,8 @@ export interface Aluno {
   data_nascimento?: string;
   matricula: string;
   turma_id?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Usuario {
@@ -46,15 +54,19 @@ export interface Usuario {
   aluno_id?: number;
   professor_id?: number;
   ativo: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Diario {
   id: number;
-  turma_id: number;
-  disciplina_id: number;
-  professor_id: number;
+  turma_id?: number;
+  disciplina_id?: number;
+  professor_id?: number;
   ano: number;
-  status: 'EM_ANDAMENTO' | 'FINALIZADO' | 'CANCELADO';
+  status?: string; // 'EM_ANDAMENTO' | 'FINALIZADO' | 'CANCELADO'
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Aula {
@@ -65,6 +77,8 @@ export interface Aula {
   hora_fim: string;
   conteudo?: string;
   observacoes?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Presenca {
@@ -73,6 +87,8 @@ export interface Presenca {
   aluno_id: number;
   status: 'PRESENTE' | 'FALTA' | 'JUSTIFICADA';
   observacao?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Avaliacao {
@@ -84,6 +100,8 @@ export interface Avaliacao {
   tipo: string;
   peso: number;
   bimestre: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Nota {
@@ -92,6 +110,8 @@ export interface Nota {
   aluno_id: number;
   valor: number;
   observacao?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Ocorrencia {
@@ -102,6 +122,8 @@ export interface Ocorrencia {
   data: string;
   descricao: string;
   acao_tomada?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // =============================================
@@ -112,11 +134,14 @@ class SupabaseService {
   // TURMAS
   async getTurmas(): Promise<Turma[]> {
     const { data, error } = await supabase.from('turmas').select('*').order('nome');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar turmas:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createTurma(turma: Omit<Turma, 'id'>): Promise<Turma> {
+  async createTurma(turma: Omit<Turma, 'id' | 'created_at' | 'updated_at'>): Promise<Turma> {
     const { data, error } = await supabase.from('turmas').insert([turma]).select().single();
     if (error) throw error;
     return data;
@@ -133,14 +158,26 @@ class SupabaseService {
     if (error) throw error;
   }
 
+  async getTurmaById(id: number): Promise<Turma | null> {
+    const { data, error } = await supabase.from('turmas').select('*').eq('id', id).single();
+    if (error) {
+      console.error('Erro ao buscar turma:', error);
+      return null;
+    }
+    return data;
+  }
+
   // DISCIPLINAS
   async getDisciplinas(): Promise<Disciplina[]> {
     const { data, error } = await supabase.from('disciplinas').select('*').order('nome');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar disciplinas:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createDisciplina(disciplina: Omit<Disciplina, 'id'>): Promise<Disciplina> {
+  async createDisciplina(disciplina: Omit<Disciplina, 'id' | 'created_at' | 'updated_at'>): Promise<Disciplina> {
     const { data, error } = await supabase.from('disciplinas').insert([disciplina]).select().single();
     if (error) throw error;
     return data;
@@ -157,14 +194,26 @@ class SupabaseService {
     if (error) throw error;
   }
 
+  async getDisciplinaById(id: number): Promise<Disciplina | null> {
+    const { data, error } = await supabase.from('disciplinas').select('*').eq('id', id).single();
+    if (error) {
+      console.error('Erro ao buscar disciplina:', error);
+      return null;
+    }
+    return data;
+  }
+
   // PROFESSORES
   async getProfessores(): Promise<Professor[]> {
     const { data, error } = await supabase.from('professores').select('*').order('nome');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar professores:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createProfessor(professor: Omit<Professor, 'id'>): Promise<Professor> {
+  async createProfessor(professor: Omit<Professor, 'id' | 'created_at' | 'updated_at'>): Promise<Professor> {
     const { data, error } = await supabase.from('professores').insert([professor]).select().single();
     if (error) throw error;
     return data;
@@ -181,20 +230,35 @@ class SupabaseService {
     if (error) throw error;
   }
 
+  async getProfessorById(id: number): Promise<Professor | null> {
+    const { data, error } = await supabase.from('professores').select('*').eq('id', id).single();
+    if (error) {
+      console.error('Erro ao buscar professor:', error);
+      return null;
+    }
+    return data;
+  }
+
   // ALUNOS
   async getAlunos(): Promise<Aluno[]> {
     const { data, error } = await supabase.from('alunos').select('*').order('nome');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar alunos:', error);
+      throw error;
+    }
     return data || [];
   }
 
   async getAlunosByTurma(turmaId: number): Promise<Aluno[]> {
     const { data, error } = await supabase.from('alunos').select('*').eq('turma_id', turmaId).order('nome');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar alunos da turma:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createAluno(aluno: Omit<Aluno, 'id'>): Promise<Aluno> {
+  async createAluno(aluno: Omit<Aluno, 'id' | 'created_at' | 'updated_at'>): Promise<Aluno> {
     const { data, error } = await supabase.from('alunos').insert([aluno]).select().single();
     if (error) throw error;
     return data;
@@ -214,11 +278,14 @@ class SupabaseService {
   // USUÁRIOS
   async getUsuarios(): Promise<Usuario[]> {
     const { data, error } = await supabase.from('usuarios').select('*').order('nome');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar usuários:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createUsuario(usuario: Omit<Usuario, 'id'>, senha: string): Promise<Usuario> {
+  async createUsuario(usuario: Omit<Usuario, 'id' | 'created_at' | 'updated_at'>, senha: string): Promise<Usuario> {
     const { data: usuarioData, error: usuarioError } = await supabase
       .from('usuarios')
       .insert([usuario])
@@ -251,17 +318,23 @@ class SupabaseService {
   // DIÁRIOS
   async getDiarios(): Promise<Diario[]> {
     const { data, error } = await supabase.from('diarios').select('*').order('id');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar diários:', error);
+      throw error;
+    }
     return data || [];
   }
 
   async getDiariosByProfessor(professorId: number): Promise<Diario[]> {
     const { data, error } = await supabase.from('diarios').select('*').eq('professor_id', professorId);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar diários do professor:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createDiario(diario: Omit<Diario, 'id'>): Promise<Diario> {
+  async createDiario(diario: Omit<Diario, 'id' | 'created_at' | 'updated_at'>): Promise<Diario> {
     const { data, error } = await supabase.from('diarios').insert([diario]).select().single();
     if (error) throw error;
     return data;
@@ -300,7 +373,10 @@ class SupabaseService {
       .from('diario_alunos')
       .select('aluno_id')
       .eq('diario_id', diarioId);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar alunos do diário:', error);
+      throw error;
+    }
     return data?.map(d => d.aluno_id) || [];
   }
 
@@ -311,11 +387,14 @@ class SupabaseService {
       .select('*')
       .eq('diario_id', diarioId)
       .order('data', { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar aulas:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createAula(aula: Omit<Aula, 'id'>): Promise<Aula> {
+  async createAula(aula: Omit<Aula, 'id' | 'created_at' | 'updated_at'>): Promise<Aula> {
     const { data, error } = await supabase.from('aulas').insert([aula]).select().single();
     if (error) throw error;
     return data;
@@ -335,17 +414,23 @@ class SupabaseService {
   // PRESENÇAS
   async getPresencasByAula(aulaId: number): Promise<Presenca[]> {
     const { data, error } = await supabase.from('presencas').select('*').eq('aula_id', aulaId);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar presenças:', error);
+      throw error;
+    }
     return data || [];
   }
 
   async getPresencasByAluno(alunoId: number): Promise<Presenca[]> {
     const { data, error } = await supabase.from('presencas').select('*').eq('aluno_id', alunoId);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar presenças do aluno:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async registrarPresenca(presenca: Omit<Presenca, 'id'>): Promise<Presenca> {
+  async registrarPresenca(presenca: Omit<Presenca, 'id' | 'created_at' | 'updated_at'>): Promise<Presenca> {
     const { data, error } = await supabase.from('presencas').insert([presenca]).select().single();
     if (error) throw error;
     return data;
@@ -364,11 +449,14 @@ class SupabaseService {
       .select('*')
       .eq('diario_id', diarioId)
       .order('data');
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar avaliações:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createAvaliacao(avaliacao: Omit<Avaliacao, 'id'>): Promise<Avaliacao> {
+  async createAvaliacao(avaliacao: Omit<Avaliacao, 'id' | 'created_at' | 'updated_at'>): Promise<Avaliacao> {
     const { data, error } = await supabase.from('avaliacoes').insert([avaliacao]).select().single();
     if (error) throw error;
     return data;
@@ -388,17 +476,23 @@ class SupabaseService {
   // NOTAS
   async getNotasByAvaliacao(avaliacaoId: number): Promise<Nota[]> {
     const { data, error } = await supabase.from('notas').select('*').eq('avaliacao_id', avaliacaoId);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar notas:', error);
+      throw error;
+    }
     return data || [];
   }
 
   async getNotasByAluno(alunoId: number): Promise<Nota[]> {
     const { data, error } = await supabase.from('notas').select('*').eq('aluno_id', alunoId);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar notas do aluno:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async lancarNota(nota: Omit<Nota, 'id'>): Promise<Nota> {
+  async lancarNota(nota: Omit<Nota, 'id' | 'created_at' | 'updated_at'>): Promise<Nota> {
     const { data, error } = await supabase.from('notas').insert([nota]).select().single();
     if (error) throw error;
     return data;
@@ -417,11 +511,14 @@ class SupabaseService {
       .select('*')
       .eq('aluno_id', alunoId)
       .order('data', { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao buscar ocorrências:', error);
+      throw error;
+    }
     return data || [];
   }
 
-  async createOcorrencia(ocorrencia: Omit<Ocorrencia, 'id'>): Promise<Ocorrencia> {
+  async createOcorrencia(ocorrencia: Omit<Ocorrencia, 'id' | 'created_at' | 'updated_at'>): Promise<Ocorrencia> {
     const { data, error } = await supabase.from('ocorrencias').insert([ocorrencia]).select().single();
     if (error) throw error;
     return data;
@@ -451,24 +548,6 @@ class SupabaseService {
 
     const soma = notasDoDiario.reduce((acc, nota) => acc + nota.valor, 0);
     return soma / notasDoDiario.length;
-  }
-
-  async getDisciplinaById(id: number): Promise<Disciplina | null> {
-    const { data, error } = await supabase.from('disciplinas').select('*').eq('id', id).single();
-    if (error) return null;
-    return data;
-  }
-
-  async getTurmaById(id: number): Promise<Turma | null> {
-    const { data, error } = await supabase.from('turmas').select('*').eq('id', id).single();
-    if (error) return null;
-    return data;
-  }
-
-  async getProfessorById(id: number): Promise<Professor | null> {
-    const { data, error } = await supabase.from('professores').select('*').eq('id', id).single();
-    if (error) return null;
-    return data;
   }
 }
 
