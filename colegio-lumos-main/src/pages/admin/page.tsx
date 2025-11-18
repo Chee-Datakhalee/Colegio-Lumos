@@ -1,6 +1,5 @@
-
 import { useState } from 'react';
-import { Users, BookOpen, School, GraduationCap, FileText, Download, UserCheck, MessageSquare } from 'lucide-react';
+import { Users, BookOpen, School, GraduationCap, FileText, Download, UserCheck, MessageSquare, Link } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Button } from '../../components/ui/button';
@@ -13,6 +12,7 @@ import { TurmasList } from './components/TurmasList';
 import { UsuariosList } from './components/UsuariosList';
 import { ComunicadosList } from './components/ComunicadosList';
 import { ExportacaoTab } from './components/ExportacaoTab';
+import { ProfessorDisciplinasList } from './components/ProfessorDisciplinasList';
 import { ScrollArea } from '../../components/ui/scroll-area';
 
 export function AdminPage() {
@@ -43,6 +43,7 @@ export function AdminPage() {
             { id: 'comunicados', label: 'Comunicados', icon: MessageSquare },
             { id: 'alunos', label: 'Alunos', icon: Users },
             { id: 'professores', label: 'Professores', icon: UserCheck },
+            { id: 'prof-disciplinas', label: 'Prof-Disciplinas', icon: Link },
             { id: 'disciplinas', label: 'Disciplinas', icon: School },
             { id: 'turmas', label: 'Turmas', icon: GraduationCap },
             { id: 'usuarios', label: 'Usuários', icon: Users },
@@ -83,6 +84,10 @@ export function AdminPage() {
 
               <TabsContent value="professores">
                 <ProfessoresList />
+              </TabsContent>
+
+              <TabsContent value="prof-disciplinas">
+                <ProfessorDisciplinasList />
               </TabsContent>
 
               <TabsContent value="disciplinas">
